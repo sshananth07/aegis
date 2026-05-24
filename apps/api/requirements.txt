@@ -1,0 +1,15 @@
+fastapi==0.115.0
+starlette==0.38.6
+uvicorn
+sqlalchemy
+alembic
+pydantic
+pydantic-settings
+structlog
+httpx
+python-dotenv
+psycopg2-binary
+asyncpg
+scikit-learn
+numpy
+google-genai 

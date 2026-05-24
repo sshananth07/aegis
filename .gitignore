@@ -1,0 +1,11 @@
+.env
+.env.local
+node_modules/
+__pycache__/
+*.pyc
+venv/
+.venv/
+apps/api/.venv/
+.next/
+apps/web/.next/
+.turbo/

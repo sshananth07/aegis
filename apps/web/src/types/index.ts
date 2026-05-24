@@ -1,0 +1,98 @@
+export interface Prompt {
+  id: string
+  name: string
+  description: string | null
+  created_at: string
+}
+
+export interface PromptVersion {
+  id: string
+  prompt_id: string
+  version: number
+  template: string
+  created_at: string
+}
+
+export interface Evaluation {
+  id: string
+  prompt_version_id: string
+  provider: string
+  response: string | null
+  status: string
+  score: number | null
+  score_details: Record<string, number | null> | null
+  latency_ms: number | null
+  token_usage: number | null
+  token_usage_estimated: boolean | null
+  cost: number | null
+  created_at: string
+}
+
+export interface Dataset {
+  id: string
+  name: string
+  description: string | null
+  created_at: string
+  items: DatasetItem[]
+}
+
+export interface DatasetItem {
+  id: string
+  dataset_id: string
+  input_text: string
+  expected_output: string | null
+  check_json: boolean
+  created_at: string
+}
+
+export interface BenchmarkSuite {
+  id: string
+  name: string
+  description: string | null
+  prompt_id: string
+  prompt_version_id: string
+  dataset_id: string
+  providers: string[]
+  pass_threshold: number
+  created_at: string
+}
+
+export interface BenchmarkRun {
+  id: string
+  suite_id: string
+  status: string
+  total_cases: string
+  passed_cases: string
+  avg_latency_ms: number | null
+  avg_score: number | null
+  avg_cost: number | null
+  results: BenchmarkResult[] | null
+  created_at: string
+}
+
+export interface BenchmarkResult {
+  evaluation_group_id: string
+  provider: string
+  input: string
+  response: string | null
+  score: number
+  score_details: Record<string, unknown>
+  failure_reasons: string[]
+  latency_ms: number
+  token_usage: number
+  cost: number
+  passed: boolean
+  divergence_score?: number
+  divergence_detected?: boolean
+  rankings?: ProviderRanking[]
+  error?: string | null
+}
+
+export interface ProviderRanking {
+  provider: string
+  score: number
+  latency_ms: number
+  cost: number
+  passed: boolean
+  rank: number
+}
