@@ -7,17 +7,21 @@ from app.models.review import Review
 from app.models.evaluation import Evaluation, Trace
 from app.schemas.review import ReviewAction, ReviewResponse
 from app.core.enums import EvaluationStatus
+from app.core.auth import get_user_id
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
-TEMP_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 @router.get("/queue", response_model=list[ReviewResponse])
-def get_review_queue(db: Session = Depends(get_db)):
+def get_review_queue(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
     # Return all evaluations flagged for review that have no review yet
     flagged = db.query(Evaluation).filter(
-        Evaluation.status == EvaluationStatus.review_required
+        Evaluation.status == EvaluationStatus.review_required,
+        Evaluation.created_by == uuid.UUID(user_id)
     ).all()
 
     queue = []
@@ -29,7 +33,7 @@ def get_review_queue(db: Session = Depends(get_db)):
             # Auto-create a pending review entry
             review = Review(
                 evaluation_id=evaluation.id,
-                reviewer_id=TEMP_USER_ID,
+                reviewer_id=uuid.UUID(user_id),
                 status="pending"
             )
             db.add(review)
@@ -46,7 +50,8 @@ def get_review_queue(db: Session = Depends(get_db)):
 def submit_review(
     review_id: uuid.UUID,
     action: ReviewAction,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
 ):
     if action.status not in ("approved", "rejected"):
         raise HTTPException(
@@ -67,6 +72,7 @@ def submit_review(
     # Update review
     review.status = action.status
     review.comment = action.comment
+    review.reviewer_id = uuid.UUID(user_id)
     db.commit()
 
     # Update evaluation status based on review decision
@@ -87,7 +93,8 @@ def submit_review(
             provider=evaluation.provider,
             metadata_={
                 "review_status": action.status,
-                "comment": action.comment
+                "comment": action.comment,
+                "reviewer_id": user_id
             }
         )
         db.add(trace)
@@ -102,7 +109,11 @@ def submit_review(
     return review
 
 @router.get("/{evaluation_id}/review", response_model=ReviewResponse)
-def get_review(evaluation_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_review(
+    evaluation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
     review = db.query(Review).filter(
         Review.evaluation_id == evaluation_id
     ).first()
