@@ -8,9 +8,11 @@ import {
   FlaskConical,
   ClipboardCheck,
   Activity,
-  Zap
+  Zap,
+  LogOut
 } from "lucide-react"
 import { RealtimeIndicator } from "@/components/layout/RealtimeIndicator"
+import { useAuth } from "@/hooks/useAuth"
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -23,6 +25,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { user, signOut } = useAuth()
 
   return (
     <aside className="w-60 min-h-screen bg-gray-950 border-r border-gray-800 flex flex-col">
@@ -64,6 +67,18 @@ export function Sidebar() {
       {/* Footer */}
       <div className="border-t border-gray-800">
         <RealtimeIndicator />
+        <div className="px-3 py-3 border-t border-gray-800">
+          <div className="text-xs text-gray-500 px-3 mb-2 truncate">
+            {user?.email}
+          </div>
+          <button
+            onClick={signOut}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-gray-800 w-full transition-colors"
+          >
+            <LogOut size={16} />
+            Sign out
+          </button>
+        </div>
         <div className="px-6 pb-4">
           <p className="text-gray-600 text-xs">MVP v0.1.0</p>
         </div>
