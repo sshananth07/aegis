@@ -2,8 +2,10 @@ import json
 import re
 import httpx
 import numpy as np
+import hashlib
 import structlog 
 from app.core.config import settings
+from app.core.cache import cache_get, cache_set
 from dataclasses import dataclass 
 from enum import Enum
 from typing import Optional 
@@ -13,6 +15,11 @@ logger = structlog.get_logger()
 GEMINI_EMBEDDING_MODEL = "gemini-embedding-001"
 
 def get_embedding(text: str) -> Optional[list]:
+    cache_key = f"embedding:{hashlib.md5(text.encode()).hexdigest()}"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+
     api_key = settings.gemini_api_key
 
     if api_key:
@@ -28,7 +35,10 @@ def get_embedding(text: str) -> Optional[list]:
                     timeout=30.0
                 )
                 res.raise_for_status()
-                return res.json()["embedding"]["values"]
+                result = res.json()["embedding"]["values"]
+                if result:
+                    cache_set(cache_key, result, ttl_seconds=3600)
+                return result
         except Exception as e:
             logger.warning("gemini_embedding_failed", error=str(e))
 
@@ -49,8 +59,13 @@ def get_embedding(text: str) -> Optional[list]:
             data = res.json()
             if "embeddings" in data:
                 embeddings = data["embeddings"]
-                return embeddings[0] if embeddings else None
-            return data.get("embedding")
+                result = embeddings[0] if embeddings else None
+            else:
+                result = data.get("embedding")
+                
+            if result:
+                cache_set(cache_key, result, ttl_seconds=3600)
+            return result
     except Exception as e:
         logger.warning("ollama_embedding_failed", error=str(e))
 
