@@ -2,10 +2,8 @@
 
 import { useState } from "react"
 import { supabase } from "@/lib/supabase"
-import { useRouter } from "next/navigation"
 
 export default function AuthPage() {
-  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -13,13 +11,7 @@ export default function AuthPage() {
     setLoading(true)
     setError(null)
 
-    if (!supabase) {
-      setError("Authentication is not available.")
-      setLoading(false)
-      return
-    }
-
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await supabase!.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
@@ -73,4 +65,4 @@ export default function AuthPage() {
       </div>
     </div>
   )
-}
+} 
