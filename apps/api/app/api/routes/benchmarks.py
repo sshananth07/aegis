@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.db.base import get_db
 from app.models.benchmark import Dataset, DatasetItem, BenchmarkSuite, BenchmarkRun
@@ -10,19 +10,24 @@ from app.schemas.benchmark import (
     BenchmarkRunResponse
 )
 from app.services.benchmark_service import run_benchmark
+from app.core.auth import get_user_id
+from app.core.rate_limit import limiter
 
 router = APIRouter(prefix="/benchmarks", tags=["benchmarks"])
-TEMP_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 # --- Datasets ---
 
 @router.post("/datasets", response_model=DatasetResponse)
-def create_dataset(data: DatasetCreate, db: Session = Depends(get_db)):
+def create_dataset(
+    data: DatasetCreate,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
     dataset = Dataset(
         name=data.name,
         description=data.description,
-        created_by=TEMP_USER_ID
+        created_by=uuid.UUID(user_id)
     )
     db.add(dataset)
     db.commit()
@@ -43,14 +48,23 @@ def create_dataset(data: DatasetCreate, db: Session = Depends(get_db)):
     return dataset
 
 @router.get("/datasets", response_model=list[DatasetResponse])
-def list_datasets(db: Session = Depends(get_db)):
-    return db.query(Dataset).all()
+def list_datasets(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
+    return db.query(Dataset).filter(
+        Dataset.created_by == uuid.UUID(user_id)
+    ).all()
 
 
 # --- Benchmark Suites ---
 
 @router.post("/suites", response_model=BenchmarkSuiteResponse)
-def create_suite(data: BenchmarkSuiteCreate, db: Session = Depends(get_db)):
+def create_suite(
+    data: BenchmarkSuiteCreate,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
     prompt_version_query = db.query(PromptVersion).filter(
         PromptVersion.prompt_id == data.prompt_id
     )
@@ -78,7 +92,7 @@ def create_suite(data: BenchmarkSuiteCreate, db: Session = Depends(get_db)):
         semantic_similarity_threshold=data.semantic_similarity_threshold,
         keyword_coverage_threshold=data.keyword_coverage_threshold,
         json_validity_required=data.json_validity_required,
-        created_by=TEMP_USER_ID
+        created_by=uuid.UUID(user_id)
     )
     db.add(suite)
     db.commit()
@@ -86,12 +100,24 @@ def create_suite(data: BenchmarkSuiteCreate, db: Session = Depends(get_db)):
     return suite
 
 @router.get("/suites", response_model=list[BenchmarkSuiteResponse])
-def list_suites(db: Session = Depends(get_db)):
-    return db.query(BenchmarkSuite).all()
+def list_suites(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
+    return db.query(BenchmarkSuite).filter(
+        BenchmarkSuite.created_by == uuid.UUID(user_id)
+    ).all()
 
 @router.get("/suites/{suite_id}", response_model=BenchmarkSuiteResponse)
-def get_suite(suite_id: uuid.UUID, db: Session = Depends(get_db)):
-    suite = db.query(BenchmarkSuite).filter(BenchmarkSuite.id == suite_id).first()
+def get_suite(
+    suite_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
+    suite = db.query(BenchmarkSuite).filter(
+        BenchmarkSuite.id == suite_id,
+        BenchmarkSuite.created_by == uuid.UUID(user_id)
+    ).first()
     if not suite:
         raise HTTPException(status_code=404, detail="Suite not found")
     return suite
@@ -100,9 +126,15 @@ def get_suite(suite_id: uuid.UUID, db: Session = Depends(get_db)):
 # --- Benchmark Runs ---
 
 @router.post("/suites/{suite_id}/run", response_model=BenchmarkRunResponse)
-async def run_suite(suite_id: uuid.UUID, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+async def run_suite(
+    request: Request,
+    suite_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
     try:
-        run = await run_benchmark(db=db, suite_id=suite_id, user_id=TEMP_USER_ID)
+        run = await run_benchmark(db=db, suite_id=suite_id, user_id=uuid.UUID(user_id))
         return run
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -110,21 +142,48 @@ async def run_suite(suite_id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/suites/{suite_id}/runs", response_model=list[BenchmarkRunResponse])
-def list_runs(suite_id: uuid.UUID, db: Session = Depends(get_db)):
+def list_runs(
+    suite_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
+    # Verify suite owner
+    suite = db.query(BenchmarkSuite).filter(
+        BenchmarkSuite.id == suite_id,
+        BenchmarkSuite.created_by == uuid.UUID(user_id)
+    ).first()
+    if not suite:
+        raise HTTPException(status_code=404, detail="Suite not found")
+
     return db.query(BenchmarkRun).filter(
         BenchmarkRun.suite_id == suite_id
     ).order_by(BenchmarkRun.created_at.desc()).all()
 
 @router.get("/runs/{run_id}", response_model=BenchmarkRunResponse)
-def get_run(run_id: uuid.UUID, db: Session = Depends(get_db)):
-    run = db.query(BenchmarkRun).filter(BenchmarkRun.id == run_id).first()
+def get_run(
+    run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
+    # Join with suit to verify owner
+    run = db.query(BenchmarkRun).join(BenchmarkSuite).filter(
+        BenchmarkRun.id == run_id,
+        BenchmarkSuite.created_by == uuid.UUID(user_id)
+    ).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     return run
 
 @router.get("/runs/{run_id}/provider-summary")
-def get_provider_summary(run_id: uuid.UUID, db: Session = Depends(get_db)):
-    run = db.query(BenchmarkRun).filter(BenchmarkRun.id == run_id).first()
+def get_provider_summary(
+    run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
+    run = db.query(BenchmarkRun).join(BenchmarkSuite).filter(
+        BenchmarkRun.id == run_id,
+        BenchmarkSuite.created_by == uuid.UUID(user_id)
+    ).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
