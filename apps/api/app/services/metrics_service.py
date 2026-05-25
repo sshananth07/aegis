@@ -6,6 +6,7 @@ from app.models.benchmark import BenchmarkRun
 from app.models.metrics import ProviderMetricsHourly, ProviderMetricsDaily
 from app.models.review import Review
 from app.core.enums import EvaluationStatus
+from app.core.cache import cache_get, cache_set
 
 logger = structlog.get_logger()
 
@@ -95,6 +96,12 @@ def compute_daily_metrics(db: Session, provider: str) -> ProviderMetricsDaily:
 
 
 def get_provider_summary(db: Session) -> dict:
+    cache_key = "metrics:provider_summary"
+    cached = cache_get(cache_key)
+    if cached:
+        logger.info("cache_hit", key=cache_key)
+        return cached
+
     providers = db.query(Evaluation.provider).distinct().all()
     providers = [p[0] for p in providers]
 
@@ -127,6 +134,7 @@ def get_provider_summary(db: Session) -> dict:
             "avg_cost": sum(costs) / len(costs) if costs else 0,
         }
 
+    cache_set(cache_key, summary, ttl_seconds=300)
     return summary
 
 
