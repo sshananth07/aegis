@@ -57,6 +57,8 @@ jobs:
           labels: ${{ steps.api-meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            OLLAMA_ENABLED=false
 
       - name: Build and publish web image
         uses: docker/build-push-action@v6
