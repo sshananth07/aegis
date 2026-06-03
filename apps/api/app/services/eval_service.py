@@ -6,6 +6,7 @@ from app.models.prompt import PromptVersion
 from app.providers.router import ProviderRouter
 from app.services.scoring import compute_score
 from app.core.enums import EvaluationStatus
+from app.core.cache import cache_clear_prefix
 
 logger = structlog.get_logger()
 
@@ -101,6 +102,9 @@ async def run_evaluation(
         db.commit()
         db.refresh(evaluation)
 
+        cache_clear_prefix("metrics:")
+        cache_clear_prefix("analytics:")
+
         logger.info("evaluation_completed",
             evaluation_id=str(evaluation.id),
             provider=result.provider,
@@ -113,6 +117,8 @@ async def run_evaluation(
     except Exception as e:
         evaluation.status = EvaluationStatus.failed
         db.commit()
+        cache_clear_prefix("metrics:")
+        cache_clear_prefix("analytics:")
         log_trace("evaluation_failed", provider_name,
                   metadata={"error": str(e)})
         logger.error("evaluation_failed", error=str(e))
