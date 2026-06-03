@@ -10,6 +10,7 @@ import {
   AlertTriangle, TrendingDown,
   Activity, DollarSign, Shield
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
 const COLORS = ["#ef4444", "#f97316", "#eab308", "#3b82f6", "#8b5cf6", "#6b7280"]
 
@@ -23,6 +24,87 @@ const severityIcons: Record<string, string> = {
   high: "🟠",
 }
 
+interface FailureOverview {
+  total_evaluations: number
+  total_failures: number
+  failure_rate: number
+  top_failure_reason: string | null
+  regression_alerts: number
+}
+
+interface FailureTimeseriesPoint {
+  date: string
+  total: number
+  failed: number
+  failure_rate: number
+  pass_rate: number
+}
+
+interface FailureReason {
+  failure_reason: string
+  count: number
+}
+
+interface ProviderStability {
+  provider: string
+  total_evaluations: number
+  failure_rate: number
+  avg_latency_ms: number
+  avg_score: number
+  avg_cost: number
+  cost_efficiency_score: number | null
+}
+
+interface CostOverview {
+  total_cost: number
+  avg_cost_per_eval: number
+  most_expensive_provider: string | null
+}
+
+interface CostByProvider {
+  provider: string
+  total_cost: number
+  avg_cost: number
+  cost_efficiency_score: number | null
+}
+
+interface CostTimeseriesPoint {
+  date: string
+  cost: number
+}
+
+interface Regression {
+  entity_type: string
+  entity_id: string
+  metric: string
+  previous: number
+  current: number
+  change_percent: number
+  severity: string
+}
+
+interface BenchmarkStability {
+  suite_id: string
+  suite_name: string
+  total_runs: number
+  avg_pass_rate: number
+  std_deviation: number
+  stability: string
+  trend: string | null
+  latest_pass_rate: number | null
+}
+
+interface BenchmarkHistoryPoint {
+  run_id: string
+  suite_id: string
+  date: string
+  pass_rate: number
+  avg_score: number
+  avg_latency_ms: number
+  total_cases: number
+  passed_cases: number
+}
+
 function StatCard({
   label,
   value,
@@ -33,7 +115,7 @@ function StatCard({
   label: string
   value: string | number
   sub?: string
-  icon: any
+  icon: LucideIcon
   color?: string
 }) {
   return (
@@ -51,54 +133,54 @@ function StatCard({
 export default function AnalyticsPage() {
   const { data: failureOverview } = useQuery({
     queryKey: ["analytics-failure-overview"],
-    queryFn: () => apiFetch<any>("/analytics/failures/overview"),
+    queryFn: () => apiFetch<FailureOverview>("/analytics/failures/overview"),
     refetchInterval: 30000,
   })
 
   const { data: timeseries } = useQuery({
     queryKey: ["analytics-timeseries"],
-    queryFn: () => apiFetch<any[]>("/analytics/failures/timeseries?days=14"),
+    queryFn: () => apiFetch<FailureTimeseriesPoint[]>("/analytics/failures/timeseries?days=14"),
   })
 
   const { data: byReason } = useQuery({
     queryKey: ["analytics-by-reason"],
-    queryFn: () => apiFetch<any[]>("/analytics/failures/by-reason"),
+    queryFn: () => apiFetch<FailureReason[]>("/analytics/failures/by-reason"),
   })
 
   const { data: providerStability } = useQuery({
     queryKey: ["analytics-provider-stability"],
-    queryFn: () => apiFetch<any[]>("/analytics/failures/providers"),
+    queryFn: () => apiFetch<ProviderStability[]>("/analytics/failures/providers"),
   })
 
   const { data: costOverview } = useQuery({
     queryKey: ["analytics-cost-overview"],
-    queryFn: () => apiFetch<any>("/analytics/costs/overview"),
+    queryFn: () => apiFetch<CostOverview>("/analytics/costs/overview"),
   })
 
   const { data: costByProvider } = useQuery({
     queryKey: ["analytics-cost-providers"],
-    queryFn: () => apiFetch<any[]>("/analytics/costs/providers"),
+    queryFn: () => apiFetch<CostByProvider[]>("/analytics/costs/providers"),
   })
 
   const { data: costTimeseries } = useQuery({
     queryKey: ["analytics-cost-timeseries"],
-    queryFn: () => apiFetch<any[]>("/analytics/costs/timeseries?days=14"),
+    queryFn: () => apiFetch<CostTimeseriesPoint[]>("/analytics/costs/timeseries?days=14"),
   })
 
   const { data: regressions } = useQuery({
     queryKey: ["analytics-regressions"],
-    queryFn: () => apiFetch<any[]>("/analytics/regressions"),
+    queryFn: () => apiFetch<Regression[]>("/analytics/regressions"),
     refetchInterval: 60000,
   })
 
   const { data: benchmarkStability } = useQuery({
     queryKey: ["analytics-benchmark-stability"],
-    queryFn: () => apiFetch<any[]>("/analytics/benchmarks/stability"),
+    queryFn: () => apiFetch<BenchmarkStability[]>("/analytics/benchmarks/stability"),
   })
 
   const { data: benchmarkHistory } = useQuery({
     queryKey: ["analytics-benchmark-history"],
-    queryFn: () => apiFetch<any[]>("/analytics/benchmarks/history"),
+    queryFn: () => apiFetch<BenchmarkHistoryPoint[]>("/analytics/benchmarks/history"),
   })
 
   return (
@@ -144,7 +226,7 @@ export default function AnalyticsPage() {
                   </div>
                 </div>
                 <div className="text-sm font-mono">
-                  {r.previous_value?.toFixed(2)} → {r.current_value?.toFixed(2)}
+                  {r.previous.toFixed(2)} → {r.current.toFixed(2)}
                 </div>
               </div>
             ))}
@@ -415,24 +497,24 @@ export default function AnalyticsPage() {
         </h3>
         {benchmarkStability && benchmarkStability.length > 0 ? (
           <div className="space-y-3">
-            {benchmarkStability.map((suite: any) => {
+            {benchmarkStability.map((suite) => {
               const stabilityColor = ({
                 stable: "bg-green-100 text-green-700",
                 variable: "bg-yellow-100 text-yellow-700",
                 unstable: "bg-red-100 text-red-700",
-              } as any)[suite.stability] ?? "bg-gray-100 text-gray-700"
+              } satisfies Record<string, string>)[suite.stability] ?? "bg-gray-100 text-gray-700"
 
               const trendIcon = ({
                 improving: "↑",
                 degrading: "↓",
                 stable: "→",
-              } as any)[suite.trend] ?? "—"
+              } satisfies Record<string, string>)[suite.trend ?? ""] ?? "—"
 
               const trendColor = ({
                 improving: "text-green-600",
                 degrading: "text-red-600",
                 stable: "text-gray-500",
-              } as any)[suite.trend] ?? "text-gray-400"
+              } satisfies Record<string, string>)[suite.trend ?? ""] ?? "text-gray-400"
 
               return (
                 <div
@@ -492,7 +574,7 @@ export default function AnalyticsPage() {
                 tickFormatter={(v) => `${Math.round(v * 100)}%`}
               />
               <Tooltip
-                formatter={(v: any) => [
+                formatter={(v: unknown) => [
                   `${Math.round(Number(v) * 100)}%`,
                   "Pass Rate",
                 ]}
