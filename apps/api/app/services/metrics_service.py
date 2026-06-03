@@ -134,7 +134,7 @@ def get_provider_summary(db: Session) -> dict:
             "avg_cost": sum(costs) / len(costs) if costs else 0,
         }
 
-    cache_set(cache_key, summary, ttl_seconds=300)
+    cache_set(cache_key, summary, ttl_seconds=10)
     return summary
 
 
