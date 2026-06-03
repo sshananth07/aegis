@@ -7,7 +7,7 @@ COST_PER_1K_INPUT = 0.00025
 COST_PER_1K_OUTPUT = 0.0005
 
 class GeminiProvider(BaseProvider):
-    def __init__(self, model: str = "gemini-3.5-flash"):
+    def __init__(self, model: str = "gemini-2.5-flash"):
         self.model = model
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -20,7 +20,7 @@ class GeminiProvider(BaseProvider):
                 headers={"x-goog-api-key": settings.gemini_api_key},
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"maxOutputTokens": 500}
+                    "generationConfig": {"maxOutputTokens": 1024}
                 },
                 timeout=30.0
             )
