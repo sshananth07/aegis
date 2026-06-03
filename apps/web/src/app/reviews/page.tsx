@@ -188,6 +188,11 @@ export default function ReviewsPage() {
     queryFn: () => apiFetch<Review[]>("/reviews/queue"),
   })
 
+  const { data: completedReviews } = useQuery({
+    queryKey: ["completed-reviews"],
+    queryFn: () => apiFetch<any[]>("/reviews/queue?status=completed"),
+  })
+
   const submitReview = useMutation({
     mutationFn: ({
       reviewId,
@@ -285,6 +290,59 @@ export default function ReviewsPage() {
           <p className="text-gray-400 text-sm mt-1">
             Evaluations with low scores or divergence will appear here.
           </p>
+        </div>
+      )}
+
+      {/* Review Timeline */}
+      {completed.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold mb-4 text-gray-700">
+            Review History
+          </h2>
+          <div className="bg-white border rounded-xl overflow-hidden">
+            {completed.map((review, i) => (
+              <div
+                key={review.id}
+                className={`flex items-center justify-between p-4 ${
+                  i < completed.length - 1 ? "border-b" : ""
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      review.status === "approved"
+                        ? "bg-green-500"
+                        : "bg-red-500"
+                    }`}
+                  />
+                  <div>
+                    <div className="text-sm font-mono text-gray-600">
+                      {review.evaluation_id.slice(0, 8)}...
+                    </div>
+                    {review.comment && (
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {review.comment}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full font-medium ${
+                      review.status === "approved"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-red-100 text-red-700"
+                    }`}
+                  >
+                    {review.status}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {new Date(review.updated_at).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
