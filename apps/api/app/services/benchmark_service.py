@@ -14,6 +14,9 @@ logger = structlog.get_logger()
 
 INPUT_PLACEHOLDERS = ("{input}", "{{input}}", "{{ input }}")
 
+# Maximum time (seconds) allowed for all providers to respond for a single item
+ITEM_TIMEOUT_SECONDS = 120
+
 
 def build_benchmark_prompt(template: str, input_text: str) -> str:
     stripped_template = template.strip()
@@ -100,6 +103,22 @@ async def _run_single_provider(
         }
 
 
+def _make_timeout_result(provider_name: str) -> dict:
+    return {
+        "provider": provider_name,
+        "response": None,
+        "score": 0.0,
+        "score_details": {},
+        "failure_reasons": [FailureReason.PROVIDER_TIMEOUT.value],
+        "latency_ms": ITEM_TIMEOUT_SECONDS * 1000,
+        "token_usage": 0,
+        "cost": 0.0,
+        "passed": False,
+        "events": [],
+        "error": "Benchmark item timed out"
+    }
+
+
 async def run_benchmark(
     db: Session,
     suite_id: uuid.UUID,
@@ -136,7 +155,7 @@ async def run_benchmark(
 
     run = BenchmarkRun(
         suite_id=suite_id,
-        status=BenchmarkRunStatus.running, # transition from queued to running
+        status=BenchmarkRunStatus.running,
         total_cases=str(len(items) * len(suite.providers)),
     )
     db.add(run)
@@ -164,7 +183,6 @@ async def run_benchmark(
                 item.input_text,
             )
 
-            # Create evaluation group for this item
             group = EvaluationGroup(
                 benchmark_run_id=run.id,
                 dataset_item_id=item.id,
@@ -174,7 +192,6 @@ async def run_benchmark(
             db.commit()
             db.refresh(group)
 
-            # Run all providers CONCURRENTLY
             provider_tasks = [
                 _run_single_provider(
                     prompt=full_prompt,
@@ -191,7 +208,20 @@ async def run_benchmark(
                 for provider in suite.providers
             ]
 
-            provider_results = await asyncio.gather(*provider_tasks)
+            # Run all providers concurrently with a timeout ceiling
+            try:
+                provider_results = await asyncio.wait_for(
+                    asyncio.gather(*provider_tasks),
+                    timeout=ITEM_TIMEOUT_SECONDS
+                )
+            except asyncio.TimeoutError:
+                logger.error("benchmark_item_timeout",
+                    item=item.input_text[:100],
+                    suite_id=str(suite_id)
+                )
+                provider_results = [
+                    _make_timeout_result(p) for p in suite.providers
+                ]
 
             # Compute comparison if multiple providers
             if len(provider_results) > 1:
@@ -215,7 +245,6 @@ async def run_benchmark(
             else:
                 comparison = None
 
-            # Store results per provider
             for r in provider_results:
                 result_entry = {
                     "evaluation_group_id": str(group.id),
@@ -277,7 +306,7 @@ async def run_benchmark(
         )
 
     except Exception as e:
-        run.status = "failed"
+        run.status = BenchmarkRunStatus.failed
         db.commit()
         logger.error("benchmark_failed", error=str(e))
         raise
