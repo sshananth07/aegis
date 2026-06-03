@@ -9,10 +9,12 @@ import {
   ClipboardCheck,
   Activity,
   Zap,
-  LogOut
+  LogOut,
+  Database
 } from "lucide-react"
 import { RealtimeIndicator } from "@/components/layout/RealtimeIndicator"
 import { useAuth } from "@/hooks/useAuth"
+import { BarChart2 } from "lucide-react"
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -21,6 +23,8 @@ const navItems = [
   { href: "/benchmarks", icon: FlaskConical, label: "Benchmarks" },
   { href: "/reviews", icon: ClipboardCheck, label: "Reviews" },
   { href: "/traces", icon: Activity, label: "Traces" },
+  { href: "/datasets", icon: Database, label: "Datasets" },
+  { href: "/analytics", icon: BarChart2, label: "Analytics" },
 ]
 
 export function Sidebar() {
