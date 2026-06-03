@@ -204,7 +204,7 @@ def compute_score(
         required_keywords: Optional[list[str]] = None,
         required_json_fields: Optional[list[str]] = None,
         require_json: bool = False,
-        semantic_similarity_threshold: float = 0.7,
+        semantic_similarity_threshold: float = 0.5,
         keyword_coverage_threshold: float = 0.6,
 ) -> ScoreResult:
     required_keywords = required_keywords or []
