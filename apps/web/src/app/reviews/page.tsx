@@ -188,11 +188,6 @@ export default function ReviewsPage() {
     queryFn: () => apiFetch<Review[]>("/reviews/queue"),
   })
 
-  const { data: completedReviews } = useQuery({
-    queryKey: ["completed-reviews"],
-    queryFn: () => apiFetch<any[]>("/reviews/queue?status=completed"),
-  })
-
   const submitReview = useMutation({
     mutationFn: ({
       reviewId,
