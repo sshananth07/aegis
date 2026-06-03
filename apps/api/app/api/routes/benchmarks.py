@@ -1,11 +1,12 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.db.base import get_db
 from app.models.benchmark import Dataset, DatasetItem, BenchmarkSuite, BenchmarkRun
 from app.models.prompt import PromptVersion
 from app.schemas.benchmark import (
     DatasetCreate, DatasetResponse,
+    DatasetItemCreate, DatasetItemResponse,
     BenchmarkSuiteCreate, BenchmarkSuiteResponse,
     BenchmarkRunResponse
 )
@@ -52,9 +53,133 @@ def list_datasets(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_user_id)
 ):
-    return db.query(Dataset).filter(
+    return db.query(Dataset).options(
+        joinedload(Dataset.items)
+    ).filter(
         Dataset.created_by == uuid.UUID(user_id)
     ).all()
+
+@router.get("/datasets/{dataset_id}", response_model=DatasetResponse)
+def get_dataset(
+    dataset_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
+    dataset = db.query(Dataset).options(
+        joinedload(Dataset.items)
+    ).filter(
+        Dataset.id == dataset_id,
+        Dataset.created_by == uuid.UUID(user_id)
+    ).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return dataset
+
+@router.post("/datasets/{dataset_id}/items", response_model=DatasetItemResponse)
+def add_dataset_item(
+    dataset_id: uuid.UUID,
+    item: DatasetItemCreate,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
+    # Verify ownership
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.created_by == uuid.UUID(user_id)
+    ).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    db_item = DatasetItem(
+        dataset_id=dataset_id,
+        input_text=item.input_text,
+        expected_output=item.expected_output,
+        check_json=item.check_json,
+        required_keywords=item.required_keywords,
+        required_json_fields=item.required_json_fields,
+    )
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+@router.delete("/datasets/{dataset_id}/items/{item_id}")
+def delete_dataset_item(
+    dataset_id: uuid.UUID,
+    item_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.created_by == uuid.UUID(user_id)
+    ).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    item = db.query(DatasetItem).filter(
+        DatasetItem.id == item_id,
+        DatasetItem.dataset_id == dataset_id
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    db.delete(item)
+    db.commit()
+    return {"deleted": True}
+
+@router.delete("/datasets/{dataset_id}")
+def delete_dataset(
+    dataset_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.created_by == uuid.UUID(user_id)
+    ).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    # Delete items first due to foreign key constraint
+    db.query(DatasetItem).filter(
+        DatasetItem.dataset_id == dataset_id
+    ).delete()
+
+    db.delete(dataset)
+    db.commit()
+    return {"deleted": True}
+
+@router.patch("/datasets/{dataset_id}/items/{item_id}", response_model=DatasetItemResponse)
+def update_dataset_item(
+    dataset_id: uuid.UUID,
+    item_id: uuid.UUID,
+    item: DatasetItemCreate,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.created_by == uuid.UUID(user_id)
+    ).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    db_item = db.query(DatasetItem).filter(
+        DatasetItem.id == item_id,
+        DatasetItem.dataset_id == dataset_id
+    ).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    db_item.input_text = item.input_text
+    db_item.expected_output = item.expected_output
+    db_item.check_json = item.check_json
+    db_item.required_keywords = item.required_keywords
+    db_item.required_json_fields = item.required_json_fields
+    db.commit()
+    db.refresh(db_item)
+    return db_item
 
 
 # --- Benchmark Suites ---
