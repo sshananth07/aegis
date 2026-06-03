@@ -120,3 +120,15 @@ def get_review(
     if not review:
         raise HTTPException(status_code=404, detail="No review found")
     return review
+
+@router.get("/history", response_model=list[ReviewResponse])
+def get_review_history(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_user_id)
+):
+    """Returns completed reviews as a timeline"""
+    reviews = db.query(Review).filter(
+        Review.reviewer_id == uuid.UUID(user_id),
+        Review.status.in_(["approved", "rejected"])
+    ).order_by(Review.updated_at.desc()).limit(20).all()
+    return reviews
