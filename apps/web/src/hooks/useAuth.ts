@@ -12,7 +12,6 @@ export function useAuth() {
 
   useEffect(() => {
     if (!supabase) {
-      // Use setTimeout to avoid setState in effect body
       const timer = setTimeout(() => setLoading(false), 0)
       return () => clearTimeout(timer)
     }
@@ -31,8 +30,12 @@ export function useAuth() {
           router.push("/auth")
         }
 
+        // Only redirect to home on fresh sign in from auth page
         if (event === "SIGNED_IN") {
-          router.push("/")
+          const currentPath = window.location.pathname
+          if (currentPath === "/auth" || currentPath === "/auth/callback") {
+            router.push("/")
+          }
         }
       }
     )
