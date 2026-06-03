@@ -42,6 +42,8 @@ export interface DatasetItem {
   input_text: string
   expected_output: string | null
   check_json: boolean
+  required_keywords: string[]
+  required_json_fields: string[]
   created_at: string
 }
 
