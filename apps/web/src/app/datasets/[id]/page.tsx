@@ -495,7 +495,7 @@ export default function DatasetDetailPage() {
             <Database className="mx-auto text-gray-300 mb-3" size={40} />
             <p className="text-gray-500">No items yet.</p>
             <p className="text-gray-400 text-sm mt-1">
-              Click "Add Item" to add test cases.
+              Click &quot;Add Item&quot; to add test cases.
             </p>
           </div>
         )}
