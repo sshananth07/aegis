@@ -1,8 +1,8 @@
 """add_webhooks_tables
 
-Revision ID: a1b2c3d4e5f6
-Revises: 6f875be5cedd
-Create Date: 2026-06-08 00:00:00.000000
+Revision ID: b2c3d4e5f6a1
+Revises: a3f8c2e91b4d
+Create Date: 2026-06-08 00:00:01.000000
 
 """
 from typing import Sequence, Union
@@ -13,8 +13,8 @@ from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'a1b2c3d4e5f6'
-down_revision: Union[str, Sequence[str], None] = '6f875be5cedd'
+revision: str = 'b2c3d4e5f6a1'
+down_revision: Union[str, Sequence[str], None] = 'a3f8c2e91b4d'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
