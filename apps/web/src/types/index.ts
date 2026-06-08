@@ -127,3 +127,26 @@ export interface Job {
   started_at: string | null
   completed_at: string | null
 }
+
+export interface Webhook {
+  id: string
+  user_id: string
+  url: string
+  event_types: string[]
+  active: boolean
+  created_at: string
+}
+
+export interface WebhookCreateResponse extends Webhook {
+  secret: string
+}
+
+export interface WebhookDelivery {
+  id: string
+  webhook_id: string
+  event_type: string
+  status: string
+  response_code: number | null
+  error_message: string | null
+  attempted_at: string
+}
