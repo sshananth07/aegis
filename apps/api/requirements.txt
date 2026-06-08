@@ -15,5 +15,7 @@ numpy
 google-genai 
 PyJWT
 cryptography
-redis
 slowapi 
+dramatiq[redis]
+redis
+apscheduler

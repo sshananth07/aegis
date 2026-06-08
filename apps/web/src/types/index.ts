@@ -113,4 +113,17 @@ export interface APIKey {
 
 export interface APIKeyCreateResponse extends APIKey {
   key: string
+export interface Job {
+  id: string
+  job_type: string
+  status: string
+  entity_id: string | null
+  entity_type: string | null
+  result_id: string | null
+  progress: number
+  total: number
+  error: string | null
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
 }
