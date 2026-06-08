@@ -10,7 +10,8 @@ import {
   Activity,
   Zap,
   LogOut,
-  Database
+  Database,
+  Key
 } from "lucide-react"
 import { RealtimeIndicator } from "@/components/layout/RealtimeIndicator"
 import { useAuth } from "@/hooks/useAuth"
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/traces", icon: Activity, label: "Traces" },
   { href: "/datasets", icon: Database, label: "Datasets" },
   { href: "/analytics", icon: BarChart2, label: "Analytics" },
+  { href: "/api-keys", icon: Key, label: "API Keys" },
 ]
 
 export function Sidebar() {
