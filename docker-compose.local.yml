@@ -1,4 +1,17 @@
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - aegis-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   ollama:
     image: ollama/ollama
     ports:
@@ -43,7 +56,10 @@ services:
     environment:
       - OLLAMA_HOST=http://ollama:11434
       - OLLAMA_ENABLED=true
+      - REDIS_URL=redis://redis:6379
     depends_on:
+      redis:
+        condition: service_healthy
       ollama:
         condition: service_healthy
     networks:
@@ -62,6 +78,27 @@ services:
       - NEXT_PUBLIC_API_URL=http://api:8000
     depends_on:
       - api
+    networks:
+      - aegis-network
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.worker
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_ENABLED=true
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      api:
+        condition: service_started
     networks:
       - aegis-network
     restart: unless-stopped
