@@ -1,5 +1,8 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from pathlib import Path
+
+API_DIR = Path(__file__).resolve().parents[2]
+REPO_ROOT = API_DIR.parent.parent if API_DIR.parent.name == "apps" else API_DIR
 
 
 class Settings(BaseSettings):
@@ -11,9 +14,15 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     ollama_enabled: bool = False
     ollama_host: str = "http://localhost:11434"
+    redis_url: str = "redis://localhost:6379"
 
     class Config:
-        env_file = ".env"
+        env_file = (
+            str(REPO_ROOT / ".env"),
+            ".env",
+            str(API_DIR / ".env"),
+        )
+        extra = "ignore"
 
     def validate_required(self):
         missing = []

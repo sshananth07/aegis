@@ -7,7 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.logging import setup_logging
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.api.routes import prompts, evaluations, benchmarks, reviews, metrics, exports, analytics
+from app.api.routes import prompts, evaluations, benchmarks, reviews, metrics, exports, analytics, jobs, public
 
 setup_logging()
 
@@ -17,7 +17,14 @@ async def lifespan(app: FastAPI):
     settings.validate_required()
     yield
 
-app = FastAPI(title="Aegis API", lifespan=lifespan)
+app = FastAPI(
+    title="Aegis Platform API",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/v1/openapi.json",
+    lifespan=lifespan,
+)
 
 # Rate limiting
 app.state.limiter = limiter
@@ -39,7 +46,9 @@ app.include_router(benchmarks.router)
 app.include_router(reviews.router)
 app.include_router(metrics.router)
 app.include_router(exports.router)
-app.include_router(analytics.router) 
+app.include_router(analytics.router)
+app.include_router(jobs.router)
+app.include_router(public.router)
 
 @app.get("/health")
 def health():
