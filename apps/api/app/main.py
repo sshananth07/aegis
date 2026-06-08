@@ -8,6 +8,7 @@ from app.core.logging import setup_logging
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.api.routes import prompts, evaluations, benchmarks, reviews, metrics, exports, analytics, jobs, public
+from app.core.exceptions import AegisAPIException, aegis_exception_handler
 from app.api.routes import prompts, evaluations, benchmarks, reviews, metrics, exports, analytics, api_keys
 
 setup_logging()
@@ -31,6 +32,9 @@ app = FastAPI(
 # Rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Aegis error contract
+app.add_exception_handler(AegisAPIException, aegis_exception_handler)
 
 # CORS
 origins = [o.strip() for o in settings.cors_origins.split(",")]

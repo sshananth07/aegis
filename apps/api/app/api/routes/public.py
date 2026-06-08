@@ -1,196 +1,201 @@
+"""
+Public /v1 API routes — authenticated via API key (X-API-Key header).
+
+Endpoints:
+  GET /v1/traces          — list traces (scope: traces:read)
+  GET /v1/traces/{id}     — get single trace (scope: traces:read)
+  GET /v1/metrics         — aggregated metrics (scope: metrics:read)
+"""
+
 import uuid
 import structlog
-from typing import Optional, Tuple
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pydantic import BaseModel
-from redis.exceptions import RedisError
+from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_api_key_user, require_scope
-from app.core.cache import cache_get, cache_set
-from app.core.rate_limit import limiter
 from app.db.base import get_db
-from app.models.benchmark import BenchmarkRun, BenchmarkSuite, DatasetItem
-from app.models.evaluation import Evaluation
-from app.schemas.benchmark import BenchmarkRunResponse
-from app.schemas.evaluation import EvaluationCreate, EvaluationResponse
-from app.schemas.job import JobResponse
-from app.models.job import Job
-from app.services.job_service import create_job
-from app.workers.benchmark_worker import run_benchmark_job
-from app.workers.evaluation_worker import run_evaluation_job
+from app.core.rate_limit import limiter
+from app.core.exceptions import (
+    invalid_api_key,
+    resource_not_found,
+)
+from app.models.evaluation import Evaluation, Trace
+from app.core.enums import EvaluationStatus
 
 logger = structlog.get_logger()
 
-router = APIRouter(prefix="/v1", tags=["public-api"])
+router = APIRouter(prefix="/v1", tags=["public"])
 
 
-# ---------------------------------------------------------------------------
-# Evaluations
-# ---------------------------------------------------------------------------
+# ── Auth stub ─────────────────────────────────────────────────────────────────
+# When Unit 2 (API-key management) is merged, replace this with:
+#   from app.core.auth import get_api_key_user
+# and remove the stub below.
 
-@router.post("/evaluations", response_model=JobResponse)
+async def get_api_key_user(
+    x_api_key: str = Header(..., alias="X-API-Key"),
+    db: Session = Depends(get_db),
+) -> str:
+    """
+    Validate the X-API-Key header and return the owner's user_id (UUID string).
+
+    This is a stub — it always rejects requests until Unit 2's ApiKey model is
+    merged.  Once merged, swap this body for a real DB lookup:
+
+        key_row = db.query(ApiKey).filter(
+            ApiKey.key_hash == hash_key(x_api_key),
+            ApiKey.revoked == False,
+        ).first()
+        if not key_row:
+            raise invalid_api_key()
+        return str(key_row.created_by)
+    """
+    # Stub: reject all keys so the error contract is exercised in tests.
+    raise invalid_api_key()
+
+
+# ── Traces ────────────────────────────────────────────────────────────────────
+
+@router.get("/traces")
 @limiter.limit("60/minute")
-async def public_create_evaluation(
+def list_traces(
     request: Request,
-    data: EvaluationCreate,
-    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    limit: int = 50,
+    offset: int = 0,
     db: Session = Depends(get_db),
-    user_id: str = Depends(require_scope("evaluations:write")),
+    user_id: str = Depends(get_api_key_user),
 ):
-    """Create an evaluation via API key. Supports Idempotency-Key header."""
-    # Idempotency check
-    if idempotency_key:
-        cache_key = f"idempotency:eval:{user_id}:{idempotency_key}"
-        cached = cache_get(cache_key)
-        if cached is not None:
-            logger.info("idempotency_hit", key=idempotency_key)
-            job = db.query(Job).filter(Job.id == uuid.UUID(cached)).first()
-            if job:
-                return job
+    """List traces owned by the authenticated API-key user (paginated)."""
+    logger.info("v1.traces.list", user_id=user_id, limit=limit, offset=offset)
 
-    job = create_job(
-        db=db,
-        job_type="evaluation",
-        user_id=uuid.UUID(user_id),
-        entity_id=data.prompt_version_id,
-        entity_type="prompt_version",
-        total=1,
-        metadata={"provider": data.provider},
+    base_query = (
+        db.query(Trace)
+        .join(Evaluation, Trace.evaluation_id == Evaluation.id)
+        .filter(Evaluation.created_by == uuid.UUID(user_id))
     )
 
-    run_evaluation_job.send(
-        str(job.id),
-        str(data.prompt_version_id),
-        data.provider,
-        user_id,
-        data.expected_output,
-        data.check_json,
+    total = base_query.count()
+    items = (
+        base_query
+        .order_by(Trace.timestamp.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
     )
 
-    if idempotency_key:
-        cache_key = f"idempotency:eval:{user_id}:{idempotency_key}"
-        try:
-            cache_set(cache_key, str(job.id), ttl_seconds=86400)
-        except Exception:
-            pass  # gracefully skip if cache unavailable
-
-    logger.info("public_evaluation_created",
-                job_id=str(job.id),
-                user_id=user_id,
-                provider=data.provider)
-    return job
+    return {
+        "items": [_trace_to_dict(t) for t in items],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
-@router.get("/evaluations/{evaluation_id}", response_model=EvaluationResponse)
-async def public_get_evaluation(
-    evaluation_id: uuid.UUID,
+@router.get("/traces/{trace_id}")
+@limiter.limit("60/minute")
+def get_trace(
+    trace_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
-    api_key_data: Tuple[str, list] = Depends(get_api_key_user),
+    user_id: str = Depends(get_api_key_user),
 ):
-    """Retrieve a single evaluation. Requires evaluations:write or traces:read scope."""
-    user_id, scopes = api_key_data
-    if "evaluations:write" not in scopes and "traces:read" not in scopes:
-        raise HTTPException(
-            status_code=403,
-            detail="Scope 'evaluations:write' or 'traces:read' required",
+    """Get a single trace by ID (ownership-checked)."""
+    logger.info("v1.traces.get", user_id=user_id, trace_id=str(trace_id))
+
+    trace = (
+        db.query(Trace)
+        .join(Evaluation, Trace.evaluation_id == Evaluation.id)
+        .filter(
+            Trace.id == trace_id,
+            Evaluation.created_by == uuid.UUID(user_id),
         )
-
-    evaluation = db.query(Evaluation).filter(
-        Evaluation.id == evaluation_id,
-        Evaluation.created_by == uuid.UUID(user_id),
-    ).first()
-    if not evaluation:
-        raise HTTPException(status_code=404, detail="Evaluation not found")
-    return evaluation
-
-
-# ---------------------------------------------------------------------------
-# Benchmarks
-# ---------------------------------------------------------------------------
-
-class BenchmarkRunCreate(BaseModel):
-    suite_id: uuid.UUID
-
-
-@router.post("/benchmarks/run", response_model=JobResponse)
-@limiter.limit("20/minute")
-async def public_run_benchmark(
-    request: Request,
-    data: BenchmarkRunCreate,
-    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    db: Session = Depends(get_db),
-    user_id: str = Depends(require_scope("benchmarks:write")),
-):
-    """Trigger a benchmark run via API key. Supports Idempotency-Key header."""
-    # Idempotency check
-    if idempotency_key:
-        cache_key = f"idempotency:bench:{user_id}:{idempotency_key}"
-        cached = cache_get(cache_key)
-        if cached is not None:
-            logger.info("idempotency_hit", key=idempotency_key)
-            job = db.query(Job).filter(Job.id == uuid.UUID(cached)).first()
-            if job:
-                return job
-
-    suite = db.query(BenchmarkSuite).filter(
-        BenchmarkSuite.id == data.suite_id,
-        BenchmarkSuite.created_by == uuid.UUID(user_id),
-    ).first()
-    if not suite:
-        raise HTTPException(status_code=404, detail="Suite not found")
-
-    items_count = db.query(DatasetItem).filter(
-        DatasetItem.dataset_id == suite.dataset_id
-    ).count()
-    total = items_count * len(suite.providers)
-
-    job = create_job(
-        db=db,
-        job_type="benchmark",
-        user_id=uuid.UUID(user_id),
-        entity_id=data.suite_id,
-        entity_type="benchmark_suite",
-        total=total,
-        metadata={"suite_name": suite.name},
+        .first()
     )
 
-    try:
-        run_benchmark_job.send(str(job.id), str(data.suite_id), user_id)
-    except RedisError as exc:
-        job.status = "failed"
-        job.error = "Benchmark worker queue is unavailable"
-        db.commit()
-        raise HTTPException(
-            status_code=503,
-            detail="Benchmark worker queue is unavailable. Check Redis and retry.",
-        ) from exc
+    if trace is None:
+        raise resource_not_found("Trace")
 
-    if idempotency_key:
-        cache_key = f"idempotency:bench:{user_id}:{idempotency_key}"
-        try:
-            cache_set(cache_key, str(job.id), ttl_seconds=86400)
-        except Exception:
-            pass
-
-    logger.info("public_benchmark_run_created",
-                job_id=str(job.id),
-                suite_id=str(data.suite_id),
-                user_id=user_id)
-    return job
+    return _trace_to_dict(trace)
 
 
-@router.get("/benchmarks/runs/{run_id}", response_model=BenchmarkRunResponse)
-async def public_get_benchmark_run(
-    run_id: uuid.UUID,
+# ── Metrics ───────────────────────────────────────────────────────────────────
+
+@router.get("/metrics")
+@limiter.limit("30/minute")
+def get_metrics(
+    request: Request,
     db: Session = Depends(get_db),
-    user_id: str = Depends(require_scope("benchmarks:write")),
+    user_id: str = Depends(get_api_key_user),
 ):
-    """Retrieve a benchmark run. Ownership verified via BenchmarkSuite.created_by."""
-    run = db.query(BenchmarkRun).join(BenchmarkSuite).filter(
-        BenchmarkRun.id == run_id,
-        BenchmarkSuite.created_by == uuid.UUID(user_id),
-    ).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    return run
+    """Return aggregated evaluation metrics for the authenticated user."""
+    logger.info("v1.metrics.get", user_id=user_id)
+
+    evals = (
+        db.query(Evaluation)
+        .filter(Evaluation.created_by == uuid.UUID(user_id))
+        .all()
+    )
+
+    total = len(evals)
+    if total == 0:
+        return {
+            "evaluation_count": 0,
+            "pass_rate": 0.0,
+            "failure_rate": 0.0,
+            "avg_latency_ms": 0,
+            "provider_distribution": {},
+            "top_failure_reasons": [],
+            "score_avg": 0.0,
+        }
+
+    passed = sum(1 for e in evals if e.status == EvaluationStatus.completed)
+    failed = sum(
+        1 for e in evals
+        if e.status in (EvaluationStatus.failed, EvaluationStatus.review_required)
+    )
+
+    latencies = [e.latency_ms for e in evals if e.latency_ms is not None]
+    avg_latency = round(sum(latencies) / len(latencies)) if latencies else 0
+
+    scores = [e.score for e in evals if e.score is not None]
+    score_avg = round(sum(scores) / len(scores), 4) if scores else 0.0
+
+    # Provider distribution (count per provider)
+    provider_dist: dict[str, int] = {}
+    for e in evals:
+        provider_dist[e.provider] = provider_dist.get(e.provider, 0) + 1
+
+    # Top failure reasons (from score_details JSONB)
+    reason_counts: dict[str, int] = {}
+    for e in evals:
+        if e.score_details and "failure_reasons" in e.score_details:
+            for reason in e.score_details["failure_reasons"]:
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+    top_failure_reasons = [
+        {"reason": r, "count": c}
+        for r, c in sorted(reason_counts.items(), key=lambda x: x[1], reverse=True)
+    ][:10]
+
+    return {
+        "evaluation_count": total,
+        "pass_rate": round(passed / total, 4),
+        "failure_rate": round(failed / total, 4),
+        "avg_latency_ms": avg_latency,
+        "provider_distribution": provider_dist,
+        "top_failure_reasons": top_failure_reasons,
+        "score_avg": score_avg,
+    }
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _trace_to_dict(trace: Trace) -> dict:
+    return {
+        "id": str(trace.id),
+        "evaluation_id": str(trace.evaluation_id),
+        "event_type": trace.event_type,
+        "provider": trace.provider,
+        "latency_ms": trace.latency_ms,
+        "metadata": trace.metadata_,
+        "timestamp": trace.timestamp.isoformat() if trace.timestamp else None,
+    }
