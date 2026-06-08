@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Write",
+      "Edit",
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(python *)",
+      "Bash(uvicorn *)",
+      "Bash(pytest *)",
+      "Bash(npm *)",
+      "Bash(pnpm *)",
+      "Bash(curl *)",
+      "Bash(mkdir *)",
+      "Bash(ls *)",
+      "PowerShell(git *)",
+      "PowerShell(gh *)",
+      "PowerShell(python *)",
+      "PowerShell(uvicorn *)",
+      "PowerShell(pytest *)",
+      "PowerShell(npm *)",
+      "PowerShell(pnpm *)",
+      "PowerShell(curl *)",
+      "PowerShell(mkdir *)",
+      "PowerShell(ls *)"
+    ]
+  }
+}
