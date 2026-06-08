@@ -4,3 +4,6 @@ from app.models.benchmark import Dataset, DatasetItem, BenchmarkSuite, Benchmark
 from app.models.review import Review
 from app.models.metrics import ProviderMetricsHourly, ProviderMetricsDaily
 from app.models.job import Job
+from app.models.api_usage import APIUsage
+from app.models.audit import AuditEvent
+from app.models.api_key import APIKey

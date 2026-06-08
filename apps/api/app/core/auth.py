@@ -2,8 +2,7 @@ import jwt
 import httpx
 import hashlib
 import structlog
-from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional
 from fastapi import Depends, Header, HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -90,30 +89,21 @@ def get_user_id(user: dict = Depends(get_current_user)) -> str:
 async def get_api_key_user(
     x_api_key: Optional[str] = Header(None),
     db: Session = Depends(get_db),
-) -> Tuple[str, list]:
+) -> tuple:
     """Returns (user_id_str, scopes) or raises HTTP 401."""
     if not x_api_key:
         raise HTTPException(status_code=401, detail="X-API-Key header required")
-    try:
-        from app.models.api_key import APIKey
-        key_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
-        key = db.query(APIKey).filter(
-            APIKey.key_hash == key_hash,
-            APIKey.revoked == False,
-        ).first()
-        if not key:
-            raise HTTPException(status_code=401, detail="Invalid or expired API key")
-        if key.expires_at and key.expires_at < datetime.utcnow():
-            raise HTTPException(status_code=401, detail="API key expired")
-        key.last_used_at = datetime.utcnow()
-        db.commit()
-        return str(key.user_id), key.scopes or []
-    except ImportError:
-        raise HTTPException(status_code=401, detail="API key auth not yet configured")
+    from app.services.api_key_service import validate_api_key
+    result = validate_api_key(db, x_api_key)
+    if not result:
+        raise HTTPException(status_code=401, detail="Invalid or expired API key")
+    user_id, scopes = result
+    return str(user_id), scopes
 
 
 def require_scope(scope: str):
-    async def check(api_key_data: Tuple[str, list] = Depends(get_api_key_user)):
+    """Dependency factory. Usage: user_id = Depends(require_scope('evaluations:write'))"""
+    async def check(api_key_data: tuple = Depends(get_api_key_user)):
         user_id, scopes = api_key_data
         if scope not in scopes:
             raise HTTPException(status_code=403, detail=f"Scope '{scope}' required")

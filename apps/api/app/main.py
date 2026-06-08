@@ -8,6 +8,7 @@ from app.core.logging import setup_logging
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.api.routes import prompts, evaluations, benchmarks, reviews, metrics, exports, analytics, jobs, public
+from app.api.routes import prompts, evaluations, benchmarks, reviews, metrics, exports, analytics, api_keys
 
 setup_logging()
 
@@ -20,6 +21,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Aegis Platform API",
     version="1.0.0",
+    description="AI evaluation and benchmarking platform API",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/v1/openapi.json",
@@ -49,6 +51,7 @@ app.include_router(exports.router)
 app.include_router(analytics.router)
 app.include_router(jobs.router)
 app.include_router(public.router)
+app.include_router(api_keys.router)
 
 @app.get("/health")
 def health():
