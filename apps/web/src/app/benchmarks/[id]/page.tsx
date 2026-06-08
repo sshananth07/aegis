@@ -1,9 +1,11 @@
 "use client"
 
+import { useState } from "react"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { useParams, useRouter } from "next/navigation"
 import { apiFetch } from "@/lib/api"
-import { BenchmarkSuite, BenchmarkRun } from "@/types"
+import { BenchmarkSuite, BenchmarkRun, Job } from "@/types"
+import { useJob } from "@/hooks/useJob"
 import { Play, ChevronRight, CheckCircle, Clock } from "lucide-react"
 
 const statusColors: Record<string, string> = {
@@ -17,6 +19,8 @@ const statusColors: Record<string, string> = {
 export default function SuiteDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const [activeJobId, setActiveJobId] = useState<string | null>(null)
+  const activeJob = useJob(activeJobId)
 
   const { data: suite } = useQuery({
     queryKey: ["suite", id],
@@ -31,12 +35,12 @@ export default function SuiteDetailPage() {
 
   const runSuite = useMutation({
     mutationFn: () =>
-      apiFetch<BenchmarkRun>(`/benchmarks/suites/${id}/run`, {
+      apiFetch<Job>(`/benchmarks/suites/${id}/run`, {
         method: "POST",
       }),
-    onSuccess: (run) => {
+    onSuccess: (job) => {
+      setActiveJobId(job.id)
       refetch()
-      router.push(`/benchmarks/runs/${run.id}`)
     },
   })
 
@@ -74,11 +78,15 @@ export default function SuiteDetailPage() {
         </div>
         <button
           className="flex items-center gap-2 bg-green-600 text-white px-5 py-2.5 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
-          disabled={runSuite.isPending}
+          disabled={runSuite.isPending || activeJob?.status === "queued" || activeJob?.status === "running"}
           onClick={() => runSuite.mutate()}
         >
           <Play size={16} />
-          {runSuite.isPending ? "Running..." : "Run Suite"}
+          {activeJob?.status === "running"
+            ? `Running ${activeJob.progress}/${activeJob.total}`
+            : activeJob?.status === "queued"
+            ? "Queued..."
+            : "Run Suite"}
         </button>
       </div>
 
