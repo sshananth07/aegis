@@ -14,6 +14,8 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: REDIS_URL
+        sync: false
       - key: SUPABASE_JWT_SECRET
         sync: false
       - key: CORS_ORIGINS
@@ -35,3 +37,25 @@ services:
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
         sync: false 
+
+  - type: worker
+    name: aegis-worker
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile.worker
+    dockerContext: ./apps/api
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: OLLAMA_ENABLED
+        value: false
+      - key: CORS_ORIGINS
+        sync: false

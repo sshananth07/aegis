@@ -4,13 +4,16 @@ from sqlalchemy.orm import Session
 from app.db.base import get_db
 from app.schemas.evaluation import EvaluationCreate, EvaluationResponse, TraceResponse
 from app.services.eval_service import run_evaluation
+from app.services.job_service import create_job
+from app.workers.evaluation_worker import run_evaluation_job
+from app.schemas.job import JobResponse
 from app.models.evaluation import Evaluation, Trace
 from app.core.auth import get_user_id
 from app.core.rate_limit import limiter
 
 router = APIRouter(prefix="/evaluations", tags=["evaluations"])
 
-@router.post("/", response_model=EvaluationResponse)
+@router.post("/", response_model=JobResponse)
 @limiter.limit("20/minute")
 async def create_evaluation(
     request: Request,
@@ -18,20 +21,26 @@ async def create_evaluation(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_user_id)
 ):
-    try:
-        evaluation = await run_evaluation(
-            db=db,
-            prompt_version_id=data.prompt_version_id,
-            provider_name=data.provider,
-            user_id=uuid.UUID(user_id),
-            expected_output=data.expected_output,
-            check_json=data.check_json,
-        )
-        return evaluation
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    job = create_job(
+        db=db,
+        job_type="evaluation",
+        user_id=uuid.UUID(user_id),
+        entity_id=data.prompt_version_id,
+        entity_type="prompt_version",
+        total=1,
+        metadata={"provider": data.provider}
+    )
+
+    run_evaluation_job.send(
+        str(job.id),
+        str(data.prompt_version_id),
+        data.provider,
+        user_id,
+        data.expected_output,
+        data.check_json,
+    )
+
+    return job
 
 @router.get("/", response_model=list[EvaluationResponse])
 def list_evaluations(

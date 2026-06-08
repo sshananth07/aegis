@@ -12,6 +12,7 @@ import {
   LogOut,
   Database,
   Globe
+  Key
 } from "lucide-react"
 import { RealtimeIndicator } from "@/components/layout/RealtimeIndicator"
 import { useAuth } from "@/hooks/useAuth"
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/datasets", icon: Database, label: "Datasets" },
   { href: "/analytics", icon: BarChart2, label: "Analytics" },
   { href: "/webhooks", icon: Globe, label: "Webhooks" },
+  { href: "/api-keys", icon: Key, label: "API Keys" },
 ]
 
 export function Sidebar() {

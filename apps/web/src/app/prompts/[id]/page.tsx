@@ -4,7 +4,8 @@ import { useState } from "react"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { useRouter, useParams } from "next/navigation"
 import { apiFetch } from "@/lib/api"
-import { PromptVersion, Evaluation } from "@/types"
+import { PromptVersion, Job } from "@/types"
+import { useJob } from "@/hooks/useJob"
 
 export default function PromptDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -13,6 +14,8 @@ export default function PromptDetailPage() {
   const [expectedOutput, setExpectedOutput] = useState("")
   const [checkJson, setCheckJson] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState("gemini")
+  const [activeJobId, setActiveJobId] = useState<string | null>(null)
+  const activeJob = useJob(activeJobId)
 
   const { data: versions, refetch } = useQuery({
     queryKey: ["versions", id],
@@ -33,7 +36,7 @@ export default function PromptDetailPage() {
 
   const runEvaluation = useMutation({
     mutationFn: (prompt_version_id: string) =>
-      apiFetch<Evaluation>("/evaluations/", {
+      apiFetch<Job>("/evaluations/", {
         method: "POST",
         body: JSON.stringify({
           prompt_version_id,
@@ -42,8 +45,8 @@ export default function PromptDetailPage() {
           check_json: checkJson,
         }),
       }),
-    onSuccess: (evaluation) => {
-      router.push(`/evaluations/${evaluation.id}`)
+    onSuccess: (job) => {
+      setActiveJobId(job.id)
     },
   })
 
@@ -125,10 +128,14 @@ export default function PromptDetailPage() {
             </p>
             <button
               className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50"
-              disabled={runEvaluation.isPending}
+              disabled={runEvaluation.isPending || (activeJob && ["queued", "running"].includes(activeJob.status))}
               onClick={() => runEvaluation.mutate(version.id)}
             >
-              {runEvaluation.isPending ? "Running..." : "▶ Run Evaluation"}
+              {activeJob?.status === "running"
+                ? `Running... (${activeJob.progress}/${activeJob.total})`
+                : activeJob?.status === "queued"
+                ? "Queued..."
+                : "▶ Run Evaluation"}
             </button>
           </div>
         ))}

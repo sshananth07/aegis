@@ -1,5 +1,6 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
+from redis.exceptions import RedisError
 from sqlalchemy.orm import Session, joinedload
 from app.db.base import get_db
 from app.models.benchmark import Dataset, DatasetItem, BenchmarkSuite, BenchmarkRun
@@ -10,7 +11,9 @@ from app.schemas.benchmark import (
     BenchmarkSuiteCreate, BenchmarkSuiteResponse,
     BenchmarkRunResponse
 )
-from app.services.benchmark_service import run_benchmark
+from app.services.job_service import create_job
+from app.workers.benchmark_worker import run_benchmark_job
+from app.schemas.job import JobResponse
 from app.core.auth import get_user_id
 from app.core.rate_limit import limiter
 
@@ -250,7 +253,7 @@ def get_suite(
 
 # --- Benchmark Runs ---
 
-@router.post("/suites/{suite_id}/run", response_model=BenchmarkRunResponse)
+@router.post("/suites/{suite_id}/run", response_model=JobResponse)
 @limiter.limit("5/minute")
 async def run_suite(
     request: Request,
@@ -258,13 +261,42 @@ async def run_suite(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_user_id)
 ):
+    suite = db.query(BenchmarkSuite).filter(
+        BenchmarkSuite.id == suite_id
+    ).first()
+    if not suite:
+        raise HTTPException(status_code=404, detail="Suite not found")
+
+    # Count total cases
+    items = db.query(DatasetItem).filter(
+        DatasetItem.dataset_id == suite.dataset_id
+    ).count()
+    total = items * len(suite.providers)
+
+    # Create job record
+    job = create_job(
+        db=db,
+        job_type="benchmark",
+        user_id=uuid.UUID(user_id),
+        entity_id=suite_id,
+        entity_type="benchmark_suite",
+        total=total,
+        metadata={"suite_name": suite.name}
+    )
+
+    # Dispatch to worker
     try:
-        run = await run_benchmark(db=db, suite_id=suite_id, user_id=uuid.UUID(user_id))
-        return run
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        run_benchmark_job.send(str(job.id), str(suite_id), user_id)
+    except RedisError as exc:
+        job.status = "failed"
+        job.error = "Benchmark worker queue is unavailable"
+        db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="Benchmark worker queue is unavailable. Check Redis and retry.",
+        ) from exc
+
+    return job
 
 @router.get("/suites/{suite_id}/runs", response_model=list[BenchmarkRunResponse])
 def list_runs(
