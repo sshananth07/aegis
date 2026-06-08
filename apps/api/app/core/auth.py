@@ -1,5 +1,6 @@
 import jwt
 import httpx
+import hashlib
 import structlog
 from typing import Optional
 from fastapi import Depends, Header, HTTPException, Security
