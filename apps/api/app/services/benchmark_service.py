@@ -8,6 +8,7 @@ from app.models.prompt import PromptVersion
 from app.providers.router import ProviderRouter
 from app.services.scoring import FailureReason, compute_score
 from app.services.comparison_service import compute_comparison, ProviderResult
+from app.services.webhook_service import trigger_webhook
 from app.core.enums import BenchmarkRunStatus, EvaluationStatus
 
 logger = structlog.get_logger()
@@ -305,10 +306,23 @@ async def run_benchmark(
             providers=suite.providers
         )
 
+        trigger_webhook(db, suite.created_by, "benchmark.completed", {
+            "run_id": str(run.id),
+            "suite_id": str(run.suite_id),
+            "status": run.status,
+        })
+
     except Exception as e:
         run.status = BenchmarkRunStatus.failed
         db.commit()
         logger.error("benchmark_failed", error=str(e))
+
+        trigger_webhook(db, suite.created_by, "benchmark.completed", {
+            "run_id": str(run.id),
+            "suite_id": str(run.suite_id),
+            "status": BenchmarkRunStatus.failed,
+        })
+
         raise
 
     return run

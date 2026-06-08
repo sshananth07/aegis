@@ -5,6 +5,7 @@ from app.models.evaluation import Evaluation, Trace
 from app.models.prompt import PromptVersion
 from app.providers.router import ProviderRouter
 from app.services.scoring import compute_score
+from app.services.webhook_service import trigger_webhook
 from app.core.enums import EvaluationStatus
 from app.core.cache import cache_clear_prefix
 
@@ -114,6 +115,13 @@ async def run_evaluation(
 
         logger.info("debug_score", overall=score_result.overall, details=score_result.details)
 
+        trigger_webhook(db, evaluation.created_by, "evaluation.completed", {
+            "evaluation_id": str(evaluation.id),
+            "status": evaluation.status,
+            "score": evaluation.score,
+            "provider": evaluation.provider,
+        })
+
     except Exception as e:
         evaluation.status = EvaluationStatus.failed
         db.commit()
@@ -122,6 +130,14 @@ async def run_evaluation(
         log_trace("evaluation_failed", provider_name,
                   metadata={"error": str(e)})
         logger.error("evaluation_failed", error=str(e))
+
+        trigger_webhook(db, evaluation.created_by, "evaluation.completed", {
+            "evaluation_id": str(evaluation.id),
+            "status": EvaluationStatus.failed,
+            "score": None,
+            "provider": provider_name,
+        })
+
         raise
 
     return evaluation
