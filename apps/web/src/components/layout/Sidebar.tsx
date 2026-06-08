@@ -11,8 +11,8 @@ import {
   Zap,
   LogOut,
   Database,
-  Globe
-  Key
+  Globe,
+  Key,
 } from "lucide-react"
 import { RealtimeIndicator } from "@/components/layout/RealtimeIndicator"
 import { useAuth } from "@/hooks/useAuth"
