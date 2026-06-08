@@ -99,6 +99,20 @@ export interface ProviderRanking {
   rank: number
 }
 
+export interface APIKey {
+  id: string
+  user_id: string
+  name: string
+  key_prefix: string
+  scopes: string[]
+  last_used_at: string | null
+  expires_at: string | null
+  revoked: boolean
+  created_at: string
+}
+
+export interface APIKeyCreateResponse extends APIKey {
+  key: string
 export interface Job {
   id: string
   job_type: string
