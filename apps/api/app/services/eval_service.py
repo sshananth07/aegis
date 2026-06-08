@@ -7,6 +7,7 @@ from app.providers.router import ProviderRouter
 from app.services.scoring import compute_score
 from app.core.enums import EvaluationStatus
 from app.core.cache import cache_clear_prefix
+from app.services.webhook_service import trigger_webhook
 
 logger = structlog.get_logger()
 
@@ -102,6 +103,13 @@ async def run_evaluation(
         db.commit()
         db.refresh(evaluation)
 
+        trigger_webhook(db, evaluation.created_by, "evaluation.completed", {
+            "evaluation_id": str(evaluation.id),
+            "status": str(final_status),
+            "score": evaluation.score,
+            "provider": evaluation.provider,
+        })
+
         cache_clear_prefix("metrics:")
         cache_clear_prefix("analytics:")
 
@@ -117,6 +125,12 @@ async def run_evaluation(
     except Exception as e:
         evaluation.status = EvaluationStatus.failed
         db.commit()
+        trigger_webhook(db, evaluation.created_by, "evaluation.completed", {
+            "evaluation_id": str(evaluation.id),
+            "status": str(EvaluationStatus.failed),
+            "score": None,
+            "provider": evaluation.provider,
+        })
         cache_clear_prefix("metrics:")
         cache_clear_prefix("analytics:")
         log_trace("evaluation_failed", provider_name,

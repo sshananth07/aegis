@@ -9,6 +9,7 @@ from app.providers.router import ProviderRouter
 from app.services.scoring import FailureReason, compute_score
 from app.services.comparison_service import compute_comparison, ProviderResult
 from app.core.enums import BenchmarkRunStatus, EvaluationStatus
+from app.services.webhook_service import trigger_webhook
 
 logger = structlog.get_logger()
 
@@ -297,6 +298,11 @@ async def run_benchmark(
         run.results = all_results
         db.commit()
         db.refresh(run)
+
+        trigger_webhook(db, user_id, "benchmark.completed", {
+            "run_id": str(run.id),
+            "status": str(final_status),
+        })
 
         logger.info("benchmark_completed",
             run_id=str(run.id),
