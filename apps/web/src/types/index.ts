@@ -113,6 +113,8 @@ export interface APIKey {
 
 export interface APIKeyCreateResponse extends APIKey {
   key: string
+}
+
 export interface Job {
   id: string
   job_type: string

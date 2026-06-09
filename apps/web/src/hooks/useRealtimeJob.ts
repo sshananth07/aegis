@@ -21,7 +21,7 @@ export function useRealtimeJob(jobId: string | null) {
         (payload) => {
           queryClient.setQueryData(
             ["job", jobId],
-            (old: any) => ({ ...old, ...payload.new })
+            (old: Record<string, unknown>) => ({ ...old, ...payload.new })
           )
         }
       )

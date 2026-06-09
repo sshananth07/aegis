@@ -2,15 +2,14 @@
 
 import { useState } from "react"
 import { useQuery, useMutation } from "@tanstack/react-query"
-import { useRouter, useParams } from "next/navigation"
+import { useParams } from "next/navigation"
 import { apiFetch } from "@/lib/api"
 import { PromptVersion, Job } from "@/types"
 import { useJob } from "@/hooks/useJob"
 
 export default function PromptDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const router = useRouter()
-  const [template, setTemplate] = useState("")
+const [template, setTemplate] = useState("")
   const [expectedOutput, setExpectedOutput] = useState("")
   const [checkJson, setCheckJson] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState("gemini")
