@@ -9,11 +9,12 @@ Endpoints:
 
 import uuid
 import structlog
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.db.base import get_db
 from app.core.rate_limit import limiter
+from app.core.auth import get_api_key_user
 from app.core.exceptions import (
     invalid_api_key,
     resource_not_found,
@@ -26,33 +27,6 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/v1", tags=["public"])
 
 
-# ── Auth stub ─────────────────────────────────────────────────────────────────
-# When Unit 2 (API-key management) is merged, replace this with:
-#   from app.core.auth import get_api_key_user
-# and remove the stub below.
-
-async def get_api_key_user(
-    x_api_key: str = Header(..., alias="X-API-Key"),
-    db: Session = Depends(get_db),
-) -> str:
-    """
-    Validate the X-API-Key header and return the owner's user_id (UUID string).
-
-    This is a stub — it always rejects requests until Unit 2's ApiKey model is
-    merged.  Once merged, swap this body for a real DB lookup:
-
-        key_row = db.query(ApiKey).filter(
-            ApiKey.key_hash == hash_key(x_api_key),
-            ApiKey.revoked == False,
-        ).first()
-        if not key_row:
-            raise invalid_api_key()
-        return str(key_row.created_by)
-    """
-    # Stub: reject all keys so the error contract is exercised in tests.
-    raise invalid_api_key()
-
-
 # ── Traces ────────────────────────────────────────────────────────────────────
 
 @router.get("/traces")
@@ -62,9 +36,10 @@ def list_traces(
     limit: int = 50,
     offset: int = 0,
     db: Session = Depends(get_db),
-    user_id: str = Depends(get_api_key_user),
+    api_key_data: tuple = Depends(get_api_key_user),
 ):
     """List traces owned by the authenticated API-key user (paginated)."""
+    user_id, _ = api_key_data
     logger.info("v1.traces.list", user_id=user_id, limit=limit, offset=offset)
 
     base_query = (
@@ -96,9 +71,10 @@ def get_trace(
     trace_id: uuid.UUID,
     request: Request,
     db: Session = Depends(get_db),
-    user_id: str = Depends(get_api_key_user),
+    api_key_data: tuple = Depends(get_api_key_user),
 ):
     """Get a single trace by ID (ownership-checked)."""
+    user_id, _ = api_key_data
     logger.info("v1.traces.get", user_id=user_id, trace_id=str(trace_id))
 
     trace = (
@@ -124,9 +100,10 @@ def get_trace(
 def get_metrics(
     request: Request,
     db: Session = Depends(get_db),
-    user_id: str = Depends(get_api_key_user),
+    api_key_data: tuple = Depends(get_api_key_user),
 ):
     """Return aggregated evaluation metrics for the authenticated user."""
+    user_id, _ = api_key_data
     logger.info("v1.metrics.get", user_id=user_id)
 
     evals = (

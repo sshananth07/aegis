@@ -130,6 +130,10 @@ BenchmarkSuite → Dataset → DatasetItem
 BenchmarkSuite → BenchmarkRun → EvaluationGroup → Evaluation → Trace
 Evaluation → Job (async tracking)
 Evaluation → Review (manual review queue)
+User → APIKey (programmatic access)
+User → Webhook → WebhookDelivery (event delivery history)
+APIKey → APIUsage (per-key usage tracking)
+User → AuditEvent (structured audit log)
 ```
 
 ### Scoring Pipeline (`app/services/scoring.py`)
@@ -182,5 +186,10 @@ See `.env.example` for the full list.
 - **Async throughout**: FastAPI async routes, `httpx.AsyncClient` for provider calls, Dramatiq for background work
 - **Structured logging** via `structlog` (JSON output)
 - Status enums (`queued` → `running` → `completed` | `failed`) used for Job and BenchmarkRun tracking
-- JSONB columns used for flexible metadata (score details, trace metadata)
+- JSONB columns used for flexible metadata and all array fields (score details, scopes, event_types, etc.)
 - TypeScript path alias: `@/*` maps to `src/*` in the web app
+- **Pagination standard**: all list endpoints return `{ items, total, limit, offset }`
+- **Error contract on `/v1`**: `{ "error": { "code": "...", "message": "..." } }` — use `AegisAPIException` from `app.core.exceptions`
+- **API key auth**: `get_api_key_user` dependency in `auth.py` returns `(user_id_str, scopes)`; use `require_scope("scope:name")` factory for scope enforcement
+- **Webhooks**: fire-and-forget via `asyncio.create_task`; HMAC-SHA256 signed with `X-Aegis-Signature` header; trigger via `webhook_service.trigger_webhook(db, user_id, event_type, payload)`
+- **Audit logging**: fire-and-forget `audit_service.log_event()` / `log_usage()` — swallow all exceptions, never block the request path

@@ -90,13 +90,14 @@ async def get_api_key_user(
     x_api_key: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ) -> tuple:
-    """Returns (user_id_str, scopes) or raises HTTP 401."""
+    """Returns (user_id_str, scopes) or raises AegisAPIException 401."""
+    from app.core.exceptions import invalid_api_key
     if not x_api_key:
-        raise HTTPException(status_code=401, detail="X-API-Key header required")
+        raise invalid_api_key()
     from app.services.api_key_service import validate_api_key
     result = validate_api_key(db, x_api_key)
     if not result:
-        raise HTTPException(status_code=401, detail="Invalid or expired API key")
+        raise invalid_api_key()
     user_id, scopes = result
     return str(user_id), scopes
 
@@ -104,8 +105,9 @@ async def get_api_key_user(
 def require_scope(scope: str):
     """Dependency factory. Usage: user_id = Depends(require_scope('evaluations:write'))"""
     async def check(api_key_data: tuple = Depends(get_api_key_user)):
+        from app.core.exceptions import scope_denied
         user_id, scopes = api_key_data
         if scope not in scopes:
-            raise HTTPException(status_code=403, detail=f"Scope '{scope}' required")
+            raise scope_denied(scope)
         return user_id
     return check
