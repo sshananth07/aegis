@@ -12,13 +12,30 @@ jobs:
     defaults:
       run:
         working-directory: apps/api
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: aegis
+          POSTGRES_PASSWORD: aegis
+          POSTGRES_DB: aegis_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
-      DATABASE_URL: sqlite:///./ci.db
-      SUPABASE_URL: https://example.supabase.co
-      SUPABASE_ANON_KEY: test-anon-key
-      GEMINI_API_KEY: test-gemini-key
+      DATABASE_URL: postgresql://aegis:aegis@localhost:5432/aegis_test
+      SUPABASE_URL: https://placeholder.supabase.co
+      SUPABASE_ANON_KEY: placeholder-anon-key
+      GEMINI_API_KEY: placeholder-gemini-key
       CORS_ORIGINS: http://localhost:3000
       OLLAMA_ENABLED: "false"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -33,20 +50,13 @@ jobs:
         run: |
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install -r requirements.txt
-          .venv/bin/python -m pip install httpx
 
       - name: Compile check
         run: .venv/bin/python -m compileall app
 
-      - name: Health check
-        run: |
-          .venv/bin/python << 'EOF'
-          from fastapi.testclient import TestClient
-          from app.main import app
-          response = TestClient(app).get('/health')
-          assert response.status_code == 200, f'Health check failed: {response.status_code}'
-          print('Health check passed')
-          EOF
+      - name: Run unit tests (no external APIs)
+        run: .venv/bin/pytest tests/ -m "not integration" -v --tb=short
+
   web:
     runs-on: ubuntu-latest
     env:

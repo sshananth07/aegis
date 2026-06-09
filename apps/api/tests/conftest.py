@@ -151,3 +151,34 @@ def prompt_version(db, user_id):
     db.add(version)
     db.flush()
     return version
+
+
+@pytest.fixture()
+def patch_worker_db(db):
+    """
+    Patches SessionLocal in benchmark and evaluation workers so they use the
+    test's open transaction session instead of opening a new connection.
+    Without this, workers call SessionLocal() and get a fresh session that
+    cannot see rows created in the test's uncommitted transaction.
+
+    Also prevents the worker's db.close() from closing the test session —
+    that would break db.refresh() calls after the worker returns.
+    """
+    from unittest.mock import patch, MagicMock
+
+    # Wrap db so close() is a no-op but all other methods delegate to the real session
+    class _NoCloseSession:
+        def __init__(self, inner):
+            self._inner = inner
+        def close(self):
+            pass  # intentionally skip — test fixture owns this session
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    wrapped = _NoCloseSession(db)
+    mock_session_local = MagicMock(return_value=wrapped)
+
+    # Workers import SessionLocal lazily inside the function body via
+    # `from app.db.base import SessionLocal`, so we patch the source module.
+    with patch("app.db.base.SessionLocal", mock_session_local):
+        yield db

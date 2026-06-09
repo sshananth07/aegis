@@ -124,9 +124,11 @@ def test_trigger_webhook_hmac_signature(db, user_id):
         return FakeResp()
 
     with patch.object(httpx.AsyncClient, "post", new=fake_post):
-        asyncio.get_event_loop().run_until_complete(
-            _deliver(db, wh, "evaluation.completed", payload)
-        )
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_deliver(db, wh, "evaluation.completed", payload))
+        finally:
+            loop.close()
 
     assert "X-Aegis-Signature" in captured.get("headers", {}), \
         "Webhook delivery must include X-Aegis-Signature header"
