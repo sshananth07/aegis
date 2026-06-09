@@ -74,6 +74,9 @@ On Windows (no make):
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\uvicorn.exe app.main:app --reload --port 8000
+
+# Start Dramatiq workers (replaces Docker worker container on Windows)
+venv\Scripts\python.exe -m dramatiq app.workers.benchmark_worker app.workers.evaluation_worker --processes 2 --threads 4
 ```
 
 ### Frontend (`apps/web`)
@@ -188,7 +191,8 @@ See `.env.example` for the full list.
 - Status enums (`queued` → `running` → `completed` | `failed`) used for Job and BenchmarkRun tracking
 - JSONB columns used for flexible metadata and all array fields (score details, scopes, event_types, etc.)
 - TypeScript path alias: `@/*` maps to `src/*` in the web app
-- **Pagination standard**: all list endpoints return `{ items, total, limit, offset }`
+- **Pagination standard**: all list endpoints return `{ items, total, limit, offset }` — exception: `GET /prompts/` returns a plain array (pre-dates the standard)
+- **`POST /evaluations/` returns a Job, not an Evaluation** — poll `GET /jobs/{job_id}` for `result_id` to get the evaluation UUID once complete
 - **Error contract on `/v1`**: `{ "error": { "code": "...", "message": "..." } }` — use `AegisAPIException` from `app.core.exceptions`
 - **API key auth**: `get_api_key_user` dependency in `auth.py` returns `(user_id_str, scopes)`; use `require_scope("scope:name")` factory for scope enforcement
 - **Webhooks**: fire-and-forget via `asyncio.create_task`; HMAC-SHA256 signed with `X-Aegis-Signature` header; trigger via `webhook_service.trigger_webhook(db, user_id, event_type, payload)`
