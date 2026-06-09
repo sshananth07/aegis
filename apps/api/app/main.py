@@ -6,7 +6,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.core.logging import setup_logging
 from app.core.config import settings
-from app.core.rate_limit import limiter
+from app.core.rate_limit import limiter, RateLimitHeaderMiddleware
 from app.api.routes import prompts, evaluations, benchmarks, reviews, metrics, exports, analytics, jobs, public, api_keys, webhooks
 from app.core.exceptions import AegisAPIException, aegis_exception_handler
 
@@ -34,6 +34,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Aegis error contract
 app.add_exception_handler(AegisAPIException, aegis_exception_handler)
+
+# Rate limit response headers on /v1
+app.add_middleware(RateLimitHeaderMiddleware)
 
 # CORS
 origins = [o.strip() for o in settings.cors_origins.split(",")]

@@ -19,3 +19,9 @@ slowapi
 dramatiq[redis]
 redis
 apscheduler
+
+# Testing
+pytest==8.3.5
+pytest-asyncio==0.24.0
+testcontainers[postgres]==4.8.1
+factory-boy==3.3.1
